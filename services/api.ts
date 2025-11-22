@@ -1,0 +1,103 @@
+import { Project, User } from '../types';
+import { v4 as uuidv4 } from 'uuid';
+
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// Helper to simulate network delay for local fallback
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * API Service
+ * Designed to connect to a Flask + Neon Backend.
+ * Includes a fallback to LocalStorage for demonstration purposes if the backend is not running.
+ */
+
+export const api = {
+  
+  async loginUser(email: string): Promise<User> {
+    try {
+      // Attempt to hit the backend
+      const response = await fetch(`${API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) throw new Error('Backend unavailable');
+      return await response.json();
+    } catch (error) {
+      console.warn("API unavailable, using local storage fallback for Login");
+      await delay(500);
+      
+      // Local Fallback: Find or create user
+      const storedUsers = JSON.parse(localStorage.getItem('vn_users') || '[]');
+      let user = storedUsers.find((u: User) => u.email === email);
+      
+      if (!user) {
+        user = { id: uuidv4(), email, name: '', age: '' }; // Name/Age filled in onboarding
+        storedUsers.push(user);
+        localStorage.setItem('vn_users', JSON.stringify(storedUsers));
+      }
+      return user;
+    }
+  },
+
+  async updateUser(user: User): Promise<User> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user),
+      });
+      if (!response.ok) throw new Error('Backend unavailable');
+      return await response.json();
+    } catch (error) {
+      console.warn("API unavailable, using local storage fallback for Update User");
+      // Local Fallback
+      const storedUsers = JSON.parse(localStorage.getItem('vn_users') || '[]');
+      const updatedUsers = storedUsers.map((u: User) => u.id === user.id ? user : u);
+      localStorage.setItem('vn_users', JSON.stringify(updatedUsers));
+      return user;
+    }
+  },
+
+  async getProjects(userId: string): Promise<Project[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects?userId=${userId}`);
+      if (!response.ok) throw new Error('Backend unavailable');
+      return await response.json();
+    } catch (error) {
+      // Local Fallback
+      await delay(500);
+      const allProjects = JSON.parse(localStorage.getItem('vn_projects') || '[]');
+      return allProjects.filter((p: Project) => p.userId === userId);
+    }
+  },
+
+  async saveProject(project: Project): Promise<Project> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(project),
+      });
+      if (!response.ok) throw new Error('Backend unavailable');
+      return await response.json();
+    } catch (error) {
+      console.warn("API unavailable, using local storage fallback for Save Project");
+      await delay(800);
+      
+      // Local Fallback
+      const allProjects = JSON.parse(localStorage.getItem('vn_projects') || '[]');
+      const existingIndex = allProjects.findIndex((p: Project) => p.id === project.id);
+      
+      if (existingIndex >= 0) {
+        allProjects[existingIndex] = project;
+      } else {
+        allProjects.push(project);
+      }
+      
+      localStorage.setItem('vn_projects', JSON.stringify(allProjects));
+      return project;
+    }
+  }
+};
